@@ -117,7 +117,6 @@ if __name__ == "__main__":
             # ================= STEP 3.0 : ISSUE DETECTION (YOUR MODULE) =================
             print(f"\n{YELLOW}STEP 3.0 : ISSUE DETECTION ENGINE{RESET}")
 
-            # Initialize your engine with the processed DataFrame
             engine = IssueDetectionEngine(df)
             detected_issues = engine.run_all_checks()
 
@@ -130,7 +129,6 @@ if __name__ == "__main__":
                 print(f"{GRAY}{'-' * 60}{RESET}")
 
                 for issue in detected_issues:
-                    # Color coding based on severity
                     color = RED if issue['severity'] == "High" else YELLOW
                     
                     print(f"\n{BOLD}{color}[{issue['issue_id']}]{RESET}")

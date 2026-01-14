@@ -76,11 +76,8 @@ class IssueDetectionEngine:
     # 9. TYPE MISMATCH (Specifically catching "twenty", "15.0", etc.)
     def check_type_mismatch(self):
         for col in self.df.columns:
-            # Logic: If it's an age or salary column, it should NOT have letters
             col_l = col.lower()
             if any(key in col_l for key in ["age", "salary", "price", "count", "pct"]):
-                # Find rows that contain letters (like 'twenty')
-                # We use regex [a-zA-Z] to find any alphabet characters
                 text_in_numeric = self.df[self.df[col].astype(str).str.contains(r'[a-zA-Z]', na=False)][col]
                 
                 if not text_in_numeric.empty:
@@ -93,7 +90,6 @@ class IssueDetectionEngine:
                         text_in_numeric.tolist()
                     ).to_dict())
             
-            # Keep the existing mixed Python type check as well
             types = self.df[col].dropna().apply(type).unique()
             if len(types) > 1:
                 self.issues.append(DataIssue("MIXED_TYPE", col, "Type Mismatch", "High", 
