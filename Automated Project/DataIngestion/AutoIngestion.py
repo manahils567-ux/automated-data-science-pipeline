@@ -1,8 +1,8 @@
 
 import os
-from csv_Ingestion import CSVIngestion
-from excel_Ingestion import ExcelIngestion
-from json_Ingestion import JSONIngestion
+from .csv_Ingestion import CSVIngestion
+from .excel_Ingestion import ExcelIngestion
+from .json_Ingestion import JSONIngestion
 
 class AutoIngestion:
     """

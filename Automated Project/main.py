@@ -1,7 +1,7 @@
-from AutoIngestion import AutoIngestion
-from schema_validator import SchemaValidator
-from DataTypeInferencer import DataTypeInferencer
-from metadata_extractor import MetadataExtractor
+from DataIngestion.AutoIngestion import AutoIngestion
+from DataProfiling.schema_validator import SchemaValidator
+from DataProfiling.DataTypeInferencer import DataTypeInferencer
+from DataProfiling.metadata_extractor import MetadataExtractor
 
 # ---------- ANSI STYLES ----------
 RESET = "\033[0m"
