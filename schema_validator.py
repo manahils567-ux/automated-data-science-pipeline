@@ -105,7 +105,7 @@ class SchemaValidator:
     # Run All
     # --------------------------
     def run(self):
-        print("\n\n      Schema Validation Started    ")
+        print("\n Schema Validation Started  ")
 
         self.validate_shape()
         self.detect_columns()
@@ -115,5 +115,5 @@ class SchemaValidator:
         self.validate_index()
         self.generate_small_report()
 
-        print("\n     Schema Validation Completed \n\n")
+        print("\n Schema Validation Completed \n")
         return self.df, self.report
