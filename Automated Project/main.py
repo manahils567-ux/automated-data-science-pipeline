@@ -2,6 +2,10 @@ from DataIngestion.AutoIngestion import AutoIngestion
 from DataProfiling.schema_validator import SchemaValidator
 from DataProfiling.DataTypeInferencer import DataTypeInferencer
 from DataProfiling.metadata_extractor import MetadataExtractor
+from IssueDetection.DetectionEngine import IssueDetectionEngine
+
+from colorama import init
+init(autoreset=True)
 
 # ---------- ANSI STYLES ----------
 RESET = "\033[0m"
@@ -16,9 +20,7 @@ MAGENTA = "\033[35m"
 GRAY = "\033[90m"
 
 files = [
-    "C:\\Users\\lenovo\\Desktop\\SEM 3\\DSA\\project\\customers.csv",
-    "data/data.xlsx",
-    "data/data.json"
+    "dirty_test_data.csv"
 ]
 
 if __name__ == "__main__":
@@ -112,6 +114,34 @@ if __name__ == "__main__":
                 if "avg_length" in info:
                     print(f"Avg Length  : {round(info['avg_length'], 2)}")
 
+            # ================= STEP 3.0 : ISSUE DETECTION (YOUR MODULE) =================
+            print(f"\n{YELLOW}STEP 3.0 : ISSUE DETECTION ENGINE{RESET}")
+
+            # Initialize your engine with the processed DataFrame
+            engine = IssueDetectionEngine(df)
+            detected_issues = engine.run_all_checks()
+
+            if not detected_issues:
+                print(f"{GREEN}STATUS : No critical issues detected!{RESET}")
+            else:
+                print(f"{RED}STATUS : {len(detected_issues)} Issues Identified{RESET}")
+                
+                print(f"\n{BOLD}{CYAN}DETECTION REPORT{RESET}")
+                print(f"{GRAY}{'-' * 60}{RESET}")
+
+                for issue in detected_issues:
+                    # Color coding based on severity
+                    color = RED if issue['severity'] == "High" else YELLOW
+                    
+                    print(f"\n{BOLD}{color}[{issue['issue_id']}]{RESET}")
+                    print(f"  {BOLD}Category{RESET}    : {issue['issue_type']}")
+                    print(f"  {BOLD}Column{RESET}      : {issue['column']}")
+                    print(f"  {BOLD}Severity{RESET}    : {issue['severity']}")
+                    print(f"  {BOLD}Description{RESET} : {issue['description']}")
+                    
+                    if issue['examples'] and issue['examples'] != [None]:
+                        print(f"  {BOLD}Examples{RESET}    : {issue['examples']}")
+            
             # ================= PREVIEW =================
             print(f"\n{BOLD}{CYAN}DATA PREVIEW{RESET}")
             print(df.head())

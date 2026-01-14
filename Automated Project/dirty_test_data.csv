@@ -1,0 +1,7 @@
+customer_id,name,age,salary,joined_date,completion_pct
+1,John Doe,25,50000,2023-01-01,85
+2,Jane Smith,-5,0,01/05/2023,90
+2,Bob  ,30,60000,2023.07.12,120
+4,Alice?,twenty,"70,000",not_a_date,45
+5,unknown,45,,2023-12-12,0
+6,None,150,55000,2023-05-01,75
