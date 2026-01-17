@@ -3,7 +3,11 @@ from DataProfiling.schema_validator import SchemaValidator
 from DataProfiling.DataTypeInferencer import DataTypeInferencer
 from DataProfiling.metadata_extractor import MetadataExtractor
 from IssueDetection.DetectionEngine import IssueDetectionEngine
+from FixingEngine.FixRecommendationEngine import FixRecommendationEngine
+from FixingEngine.FixExecutor import FixExecutor
+from FixingEngine.ImpactAnalyzer import ImpactAnalyzer
 
+from datetime import datetime
 from colorama import init
 init(autoreset=True)
 
@@ -139,7 +143,47 @@ if __name__ == "__main__":
                     
                     if issue['examples'] and issue['examples'] != [None]:
                         print(f"  {BOLD}Examples{RESET}    : {issue['examples']}")
-            
+
+            # ================= STEP 4.0 : FIX RECOMMENDATION ENGINE =================
+            print(f"\n{YELLOW}STEP 4.0 : FIXING ENGINE{RESET}")
+
+            if not detected_issues:
+                print(f"{GREEN}STATUS : No fixes needed - dataset is clean!{RESET}")
+            else:
+                print(f"{CYAN}STATUS : Analyzing {len(detected_issues)} detected issues...{RESET}")
+
+                recommender = FixRecommendationEngine(df, detected_issues, metadata)
+                all_fixes = recommender.generate_recommendations()
+
+                # Display all fix options
+                recommender.display_recommendations(all_fixes)
+
+                # ================= STEP 4.1 : APPLY RECOMMENDED FIXES =================
+                print(f"\n{YELLOW}STEP 4.1 : APPLYING RECOMMENDED FIXES{RESET}")
+                print(f"{CYAN}STATUS : Executing best-practice cleaning operations...{RESET}\n")
+
+                executor = FixExecutor(df)
+                cleaned_df, execution_log = executor.apply_recommended_fixes(all_fixes)
+
+                print(f"{GREEN}✓ Applied {len(execution_log)} cleaning operations{RESET}")
+
+                # ================= STEP 4.2 : IMPACT ANALYSIS =================
+                print(f"\n{YELLOW}STEP 4.2 : DATA CLEANING IMPACT ANALYSIS{RESET}")
+
+                analyzer = ImpactAnalyzer(df, cleaned_df, execution_log)
+                impact_report = analyzer.generate_report()
+                analyzer.display_report(impact_report)
+
+                # Save cleaned dataset with timestamp
+                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                output_path = file_path.replace(".csv", f"_cleaned_{timestamp}.csv")
+                cleaned_df.to_csv(output_path, index=False)
+
+                print(f"{GREEN}✓ Cleaned dataset saved: {output_path}{RESET}")
+
+                # Use cleaned_df for preview
+                df = cleaned_df
+
             # ================= PREVIEW =================
             print(f"\n{BOLD}{CYAN}DATA PREVIEW{RESET}")
             print(df.head())
