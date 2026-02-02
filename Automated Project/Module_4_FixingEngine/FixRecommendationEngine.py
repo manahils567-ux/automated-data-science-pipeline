@@ -93,6 +93,19 @@ class FixRecommendationEngine:
         """
         return [fix for fix in all_fixes if fix.is_recommended]
 
+    def generate_recommendations_for_issue(self, issue):
+        """
+        Generate fix recommendations for a single issue.
+        Returns a list of DataFix objects relevant to that issue.
+        """
+        issue_type = issue.get("issue_type", "")
+        strategy = self.strategies.get(issue_type)
+
+        if strategy:
+            return strategy.generate_fixes(issue)
+        else:
+            print(f"⚠ No strategy found for issue type: {issue_type}")
+            return []
 
 # ==============================
 # Example Usage

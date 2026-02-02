@@ -716,7 +716,6 @@ class FixExecutor:
             self.df.loc[successfully_parsed_mask, column] = result_dates[successfully_parsed_mask].dt.strftime(
                 '%Y-%m-%d')
 
-
         self.execution_log.append({
             "column": column,
             "fix_applied": fix.fix_label,
@@ -734,46 +733,7 @@ class FixExecutor:
 
         return data_loss_pct > 50
 
-    # --------------------------
-    # Main Application Method
-    # --------------------------
-    def apply_recommended_fixes(self, all_fixes):
-        """
-        Apply all recommended fixes to the DataFrame in SMART ORDER.
-        """
-        self._original_row_count = len(self.df)
-
-        recommended_fixes = [fix for fix in all_fixes if fix.is_recommended]
-
-        def get_fix_priority(fix):
-            priority_map = {
-                "FIX_STRIP_WHITESPACE": 1,
-                "FIX_REMOVE_SPECIAL_CHARS": 1,
-                "FIX_REPLACE_SPECIAL_WITH_SPACE": 1,
-                "FIX_REMOVE_NON_ASCII": 1,
-                "FIX_STANDARDIZE_DATE_FORMAT": 2,
-                "FIX_WORD_TO_NUMBER": 3,
-                "FIX_PROXY_TO_NAN": 4,
-                "FIX_EMPTY_TEXT_TO_NAN": 4,
-                "FIX_INVALID_DATE_TO_NAN": 5,
-                "FIX_INVALID_DATE_IMPUTE_MEDIAN": 5,
-                "FIX_NEGATIVE_TO_MEDIAN": 6,
-                "FIX_NEGATIVE_TO_ABS": 6,
-                "FIX_CAP_AT_100": 6,
-                "FIX_IMPOSSIBLE_AGE_TO_MEDIAN": 6,
-                "FIX_ZERO_MONETARY_TO_MEDIAN": 6,
-                "FIX_MEDIAN_IMPUTE": 7,
-                "FIX_MEAN_IMPUTE": 7,
-                "FIX_MODE_IMPUTE": 7,
-                "FIX_EMPTY_TEXT_TO_MODE": 7,
-                "FIX_TEXT_TO_NAN_IMPUTE": 7,
-                "FIX_KEEP_FIRST_ID": 8,
-                "FIX_DROP_EXACT_DUPLICATES": 8,
-            }
-            return priority_map.get(fix.fix_id, 99)
-
-        # Sort by priority
-        recommended_fixes.sort(key=get_fix_priority)
+    def apply_fix(self, fix):
 
         fix_method_map = {
             "FIX_MEDIAN_IMPUTE": self._apply_median_impute,
@@ -815,14 +775,9 @@ class FixExecutor:
             "FIX_STANDARDIZE_DATE_FORMAT": self._apply_standardize_date_format
         }
 
-        for fix in recommended_fixes:
-            fix_method = fix_method_map.get(fix.fix_id)
-            if fix_method:
-                try:
-                    fix_method(fix)
-                except Exception as e:
-                    print(f"⚠ Error applying {fix.fix_label}: {e}")
-            else:
-                print(f"⚠ No implementation found for fix: {fix.fix_id}")
+        method = fix_method_map.get(fix.fix_id)
 
-        return self.df, self.execution_log
+        if not method:
+            raise ValueError(f"No implementation for {fix.fix_id}")
+
+        method(fix)

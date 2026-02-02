@@ -1,11 +1,12 @@
-from DataIngestion.AutoIngestion import AutoIngestion
-from DataProfiling.schema_validator import SchemaValidator
-from DataProfiling.DataTypeInferencer import DataTypeInferencer
-from DataProfiling.metadata_extractor import MetadataExtractor
-from IssueDetection.DetectionEngine import IssueDetectionEngine
-from FixingEngine.FixRecommendationEngine import FixRecommendationEngine
-from FixingEngine.FixExecutor import FixExecutor
-from FixingEngine.ImpactAnalyzer import ImpactAnalyzer
+from Module_1_DataIngestion.AutoIngestion import AutoIngestion
+from Module_2_DataProfiling.schema_validator import SchemaValidator
+from Module_2_DataProfiling.DataTypeInferencer import DataTypeInferencer
+from Module_2_DataProfiling.metadata_extractor import MetadataExtractor
+from Module_3_IssueDetection.DetectionEngine import IssueDetectionEngine
+from Module_4_FixingEngine.FixRecommendationEngine import FixRecommendationEngine
+from Module_4_FixingEngine import FixExecutor
+from Module_4_FixingEngine.ImpactAnalyzer import ImpactAnalyzer
+from Module_4_FixingEngine.InteractiveFixController import InteractiveFixController
 
 from datetime import datetime
 from colorama import init
@@ -24,7 +25,7 @@ MAGENTA = "\033[35m"
 GRAY = "\033[90m"
 
 files = [
-    "dirty_test_data.csv"
+    "Dirty_data_Testing_1.csv"
 ]
 
 if __name__ == "__main__":
@@ -128,60 +129,56 @@ if __name__ == "__main__":
                 print(f"{GREEN}STATUS : No critical issues detected!{RESET}")
             else:
                 print(f"{RED}STATUS : {len(detected_issues)} Issues Identified{RESET}")
-                
+
                 print(f"\n{BOLD}{CYAN}DETECTION REPORT{RESET}")
                 print(f"{GRAY}{'-' * 60}{RESET}")
 
                 for issue in detected_issues:
                     color = RED if issue['severity'] == "High" else YELLOW
-                    
+
                     print(f"\n{BOLD}{color}[{issue['issue_id']}]{RESET}")
                     print(f"  {BOLD}Category{RESET}    : {issue['issue_type']}")
                     print(f"  {BOLD}Column{RESET}      : {issue['column']}")
                     print(f"  {BOLD}Severity{RESET}    : {issue['severity']}")
                     print(f"  {BOLD}Description{RESET} : {issue['description']}")
-                    
+
                     if issue['examples'] and issue['examples'] != [None]:
                         print(f"  {BOLD}Examples{RESET}    : {issue['examples']}")
 
-            # ================= STEP 4.0 : FIX RECOMMENDATION ENGINE =================
-            print(f"\n{YELLOW}STEP 4.0 : FIXING ENGINE{RESET}")
+            # ================= STEP 4.0 : INTERACTIVE FIXING ENGINE =================
+            print(f"\n{YELLOW}STEP 4.0 : INTERACTIVE DATA CLEANING{RESET}")
 
             if not detected_issues:
                 print(f"{GREEN}STATUS : No fixes needed - dataset is clean!{RESET}")
             else:
-                print(f"{CYAN}STATUS : Analyzing {len(detected_issues)} detected issues...{RESET}")
+                print(f"{CYAN}STATUS : {len(detected_issues)} issues require user decisions{RESET}")
 
-                recommender = FixRecommendationEngine(df, detected_issues, metadata)
-                all_fixes = recommender.generate_recommendations()
+                controller = InteractiveFixController(
+                    df=df,
+                    issues=detected_issues,
+                    metadata=metadata
+                )
 
-                # Display all fix options
-                recommender.display_recommendations(all_fixes)
+                cleaned_df, execution_log = controller.run()
 
-                # ================= STEP 4.1 : APPLY RECOMMENDED FIXES =================
-                print(f"\n{YELLOW}STEP 4.1 : APPLYING RECOMMENDED FIXES{RESET}")
-                print(f"{CYAN}STATUS : Executing best-practice cleaning operations...{RESET}\n")
+                print(f"\n{GREEN}✓ Interactive cleaning completed{RESET}")
+                print(f"{CYAN}✓ Total actions logged: {len(execution_log)}{RESET}")
 
-                executor = FixExecutor(df)
-                cleaned_df, execution_log = executor.apply_recommended_fixes(all_fixes)
-
-                print(f"{GREEN}✓ Applied {len(execution_log)} cleaning operations{RESET}")
-
-                # ================= STEP 4.2 : IMPACT ANALYSIS =================
-                print(f"\n{YELLOW}STEP 4.2 : DATA CLEANING IMPACT ANALYSIS{RESET}")
+                # ================= STEP 4.1 : IMPACT ANALYSIS =================
+                print(f"\n{YELLOW}STEP 4.1 : DATA CLEANING IMPACT ANALYSIS{RESET}")
 
                 analyzer = ImpactAnalyzer(df, cleaned_df, execution_log)
                 impact_report = analyzer.generate_report()
                 analyzer.display_report(impact_report)
 
-                # Save cleaned dataset with timestamp
+                # Save cleaned dataset
                 timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
                 output_path = file_path.replace(".csv", f"_cleaned_{timestamp}.csv")
                 cleaned_df.to_csv(output_path, index=False)
 
                 print(f"{GREEN}✓ Cleaned dataset saved: {output_path}{RESET}")
 
-                # Use cleaned_df for preview
+                # Update df reference
                 df = cleaned_df
 
             # ================= PREVIEW =================
