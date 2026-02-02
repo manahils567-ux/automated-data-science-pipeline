@@ -9,7 +9,7 @@ class FixExecutor:
     """
 
     def __init__(self, df):
-        self.df = df.copy()  # Work on a copy
+        self.df = df.copy()
         self.execution_log = []
         self.id_columns = self._detect_id_columns()
 
@@ -50,7 +50,6 @@ class FixExecutor:
         round_to_int = fix.metadata.get("round_to_int", False)
         before_count = self.df[column].isna().sum()
 
-        # Round for integer contexts (age, count, etc.)
         if round_to_int:
             median_val = int(round(median_val))
 
@@ -68,7 +67,6 @@ class FixExecutor:
         round_to_int = fix.metadata.get("round_to_int", False)
         before_count = self.df[column].isna().sum()
 
-        # Round for integer contexts (age, count, etc.)
         if round_to_int:
             mean_val = int(round(mean_val))
 
@@ -95,6 +93,26 @@ class FixExecutor:
             "column": column,
             "fix_applied": fix.fix_label,
             "values_changed": before_count
+        })
+
+    def _apply_extract_numeric_impute(self, fix):
+        column = fix.column
+        median_val = fix.metadata.get("median_value")
+        extract_pattern = fix.metadata.get("extract_pattern", r'(\d+)')
+
+        before_count = self.df[column].isna().sum()
+
+        extracted = self.df[column].astype(str).str.extract(extract_pattern, expand=False).astype(float)
+
+        self.df[column] = extracted
+        self.df[column].fillna(median_val, inplace=True)
+
+        self.df[column] = self.df[column].astype(int)
+
+        self.execution_log.append({
+            "column": column,
+            "fix_applied": fix.fix_label,
+            "values_changed": f"{before_count} missing values imputed, all values extracted"
         })
 
     def _apply_drop_column(self, fix):
@@ -167,7 +185,7 @@ class FixExecutor:
         median_val = fix.metadata.get("median_value")
 
         if pd.isna(median_val):
-            median_val = 0  # Default fallback
+            median_val = 0
         else:
             median_val = int(round(median_val))
 
@@ -231,22 +249,45 @@ class FixExecutor:
             "values_changed": before_count
         })
 
+    def _apply_drop_invalid_rows(self, fix):
+        column = fix.column
+
+        numeric_col = pd.to_numeric(self.df[column], errors='coerce')
+
+        before_rows = len(self.df)
+        self.df = self.df[~(numeric_col > 100)]
+        after_rows = len(self.df)
+
+        if before_rows != after_rows:
+            self._reset_id_columns()
+
+        self.execution_log.append({
+            "column": column,
+            "fix_applied": fix.fix_label,
+            "values_changed": f"{before_rows - after_rows} rows removed"
+        })
+
     # --------------------------
     # Type Mismatch Fixes
     # --------------------------
     def _apply_word_to_number(self, fix):
-        from .fix_strategies.TypeMismatchStrategy import TypeMismatchStrategy
-
         column = fix.column
-        word_map = TypeMismatchStrategy.WORD_TO_NUM
+
+        word_to_num = {
+            'zero': 0, 'one': 1, 'two': 2, 'three': 3, 'four': 4, 'five': 5,
+            'six': 6, 'seven': 7, 'eight': 8, 'nine': 9, 'ten': 10,
+            'eleven': 11, 'twelve': 12, 'thirteen': 13, 'fourteen': 14, 'fifteen': 15,
+            'sixteen': 16, 'seventeen': 17, 'eighteen': 18, 'nineteen': 19, 'twenty': 20,
+            'thirty': 30, 'forty': 40, 'fifty': 50, 'sixty': 60, 'seventy': 70,
+            'eighty': 80, 'ninety': 90, 'hundred': 100, 'thousand': 1000
+        }
 
         def convert_word(val):
-            if pd.isna(val):
-                return val
-            val_str = str(val).lower().strip()
-            return word_map.get(val_str, val)
+            val_lower = str(val).lower().strip()
+            return word_to_num.get(val_lower, val)
 
-        before_count = self.df[column].astype(str).str.contains(r'[a-zA-Z]', na=False).sum()
+        before_count = len(self.df[self.df[column].astype(str).str.contains(r'[a-zA-Z]', na=False)])
+
         self.df[column] = self.df[column].apply(convert_word)
         self.df[column] = pd.to_numeric(self.df[column], errors='coerce')
 
@@ -260,14 +301,32 @@ class FixExecutor:
         column = fix.column
         median_val = fix.metadata.get("median_value")
 
+        before_count = len(self.df[self.df[column].astype(str).str.contains(r'[a-zA-Z]', na=False)])
+
         self.df[column] = pd.to_numeric(self.df[column], errors='coerce')
-        before_count = self.df[column].isna().sum()
         self.df[column].fillna(median_val, inplace=True)
 
         self.execution_log.append({
             "column": column,
             "fix_applied": fix.fix_label,
             "values_changed": before_count
+        })
+
+    def _apply_drop_text_rows(self, fix):
+        column = fix.column
+
+        before_rows = len(self.df)
+        text_mask = self.df[column].astype(str).str.contains(r'[a-zA-Z]', na=False)
+        self.df = self.df[~text_mask]
+        after_rows = len(self.df)
+
+        if before_rows != after_rows:
+            self._reset_id_columns()
+
+        self.execution_log.append({
+            "column": column,
+            "fix_applied": fix.fix_label,
+            "values_changed": f"{before_rows - after_rows} rows removed"
         })
 
     # --------------------------
@@ -278,12 +337,21 @@ class FixExecutor:
         p1 = fix.metadata.get("p1")
         p99 = fix.metadata.get("p99")
 
-        numeric_col = pd.to_numeric(self.df[column], errors='coerce')
-        before_count = len(numeric_col[(numeric_col < p1) | (numeric_col > p99)])
+        col_dtype = self.df[column].dtype
+        is_integer_type = pd.api.types.is_integer_dtype(col_dtype)
 
-        self.df[column] = numeric_col
+        if is_integer_type:
+            p1 = int(round(p1))
+            p99 = int(round(p99))
+            self.df[column] = self.df[column].astype(float)
+
+        before_count = len(self.df[(self.df[column] < p1) | (self.df[column] > p99)])
+
         self.df.loc[self.df[column] < p1, column] = p1
         self.df.loc[self.df[column] > p99, column] = p99
+
+        if is_integer_type:
+            self.df[column] = self.df[column].round().astype(int)
 
         self.execution_log.append({
             "column": column,
@@ -293,15 +361,24 @@ class FixExecutor:
 
     def _apply_cap_iqr(self, fix):
         column = fix.column
-        lower = fix.metadata.get("lower_bound")
-        upper = fix.metadata.get("upper_bound")
+        lower_bound = fix.metadata.get("lower_bound")
+        upper_bound = fix.metadata.get("upper_bound")
 
-        numeric_col = pd.to_numeric(self.df[column], errors='coerce')
-        before_count = len(numeric_col[(numeric_col < lower) | (numeric_col > upper)])
+        col_dtype = self.df[column].dtype
+        is_integer_type = pd.api.types.is_integer_dtype(col_dtype)
 
-        self.df[column] = numeric_col
-        self.df.loc[self.df[column] < lower, column] = lower
-        self.df.loc[self.df[column] > upper, column] = upper
+        if is_integer_type:
+            lower_bound = int(round(lower_bound))
+            upper_bound = int(round(upper_bound))
+            self.df[column] = self.df[column].astype(float)
+
+        before_count = len(self.df[(self.df[column] < lower_bound) | (self.df[column] > upper_bound)])
+
+        self.df.loc[self.df[column] < lower_bound, column] = lower_bound
+        self.df.loc[self.df[column] > upper_bound, column] = upper_bound
+
+        if is_integer_type:
+            self.df[column] = self.df[column].round().astype(int)
 
         self.execution_log.append({
             "column": column,
@@ -312,19 +389,21 @@ class FixExecutor:
     def _apply_remove_outliers(self, fix):
         column = fix.column
 
-        numeric_col = pd.to_numeric(self.df[column], errors='coerce')
-        mean_val = numeric_col.mean()
-        std_val = numeric_col.std()
+        col_data = self.df[column].dropna()
+        if len(col_data) < 3:
+            return
+
+        mean_val = col_data.mean()
+        std_val = col_data.std()
+
+        if std_val == 0:
+            return
 
         before_rows = len(self.df)
-
-        if std_val > 0:
-            z_scores = np.abs((numeric_col - mean_val) / std_val)
-            self.df = self.df[z_scores <= 3]
-
+        z_scores = np.abs((self.df[column] - mean_val) / std_val)
+        self.df = self.df[z_scores <= 3]
         after_rows = len(self.df)
 
-        # Reset ID columns after dropping rows
         if before_rows != after_rows:
             self._reset_id_columns()
 
@@ -332,6 +411,33 @@ class FixExecutor:
             "column": column,
             "fix_applied": fix.fix_label,
             "values_changed": f"{before_rows - after_rows} rows removed"
+        })
+
+    def _apply_winsorize(self, fix):
+        column = fix.column
+        p5 = fix.metadata.get("p5")
+        p95 = fix.metadata.get("p95")
+
+        col_dtype = self.df[column].dtype
+        is_integer_type = pd.api.types.is_integer_dtype(col_dtype)
+
+        if is_integer_type:
+            p5 = int(round(p5))
+            p95 = int(round(p95))
+            self.df[column] = self.df[column].astype(float)
+
+        before_count = len(self.df[(self.df[column] < p5) | (self.df[column] > p95)])
+
+        self.df.loc[self.df[column] < p5, column] = p5
+        self.df.loc[self.df[column] > p95, column] = p95
+
+        if is_integer_type:
+            self.df[column] = self.df[column].round().astype(int)
+
+        self.execution_log.append({
+            "column": column,
+            "fix_applied": fix.fix_label,
+            "values_changed": before_count
         })
 
     # --------------------------
@@ -339,35 +445,77 @@ class FixExecutor:
     # --------------------------
     def _apply_keep_first_id(self, fix):
         column = fix.column
-        before_rows = len(self.df)
 
+        before_rows = len(self.df)
         self.df.drop_duplicates(subset=[column], keep='first', inplace=True)
         after_rows = len(self.df)
 
-        # Reset ID columns after dropping rows
         if before_rows != after_rows:
             self._reset_id_columns()
 
         self.execution_log.append({
             "column": column,
             "fix_applied": fix.fix_label,
-            "values_changed": f"{before_rows - after_rows} rows removed"
+            "values_changed": f"{before_rows - after_rows} duplicates removed"
         })
 
-    def _apply_drop_exact_duplicates(self, fix):
-        before_rows = len(self.df)
+    def _apply_keep_last_id(self, fix):
+        column = fix.column
 
-        self.df.drop_duplicates(inplace=True)
+        before_rows = len(self.df)
+        self.df.drop_duplicates(subset=[column], keep='last', inplace=True)
         after_rows = len(self.df)
 
-        # Reset ID columns after dropping rows
         if before_rows != after_rows:
             self._reset_id_columns()
 
         self.execution_log.append({
-            "column": "All columns",
+            "column": column,
             "fix_applied": fix.fix_label,
-            "values_changed": f"{before_rows - after_rows} rows removed"
+            "values_changed": f"{before_rows - after_rows} duplicates removed"
+        })
+
+    def _apply_keep_complete(self, fix):
+        column = fix.column
+
+        before_rows = len(self.df)
+
+        duplicates = self.df[self.df[column].duplicated(keep=False)]
+        if duplicates.empty:
+            return
+
+        null_counts = duplicates.isnull().sum(axis=1)
+        idx_to_keep = duplicates.groupby(column).apply(
+            lambda x: x.loc[null_counts[x.index].idxmin()]).index.get_level_values(1)
+
+        self.df = pd.concat([
+            self.df[~self.df[column].duplicated(keep=False)],
+            self.df.loc[idx_to_keep]
+        ]).sort_index()
+
+        after_rows = len(self.df)
+
+        if before_rows != after_rows:
+            self._reset_id_columns()
+
+        self.execution_log.append({
+            "column": column,
+            "fix_applied": fix.fix_label,
+            "values_changed": f"{before_rows - after_rows} duplicates removed"
+        })
+
+    def _apply_drop_exact_duplicates(self, fix):
+        before_rows = len(self.df)
+        self.df.drop_duplicates(inplace=True)
+        after_rows = len(self.df)
+
+        if before_rows != after_rows:
+            self._reset_id_columns()
+
+        self.execution_log.append({
+            "column": "All Columns",
+            "fix_applied": fix.fix_label,
+            "values_changed": f"{before_rows - after_rows} exact duplicates removed"
         })
 
     # --------------------------
@@ -389,7 +537,7 @@ class FixExecutor:
         column = fix.column
         before_count = self.df[column].astype(str).str.contains(r'[^\x00-\x7F]+', na=False).sum()
 
-        self.df[column] = self.df[column].astype(str).str.replace(r'[^\x00-\x7F]+', '', regex=True)
+        self.df[column] = self.df[column].astype(str).str.encode('ascii', 'ignore').str.decode('ascii')
 
         self.execution_log.append({
             "column": column,
@@ -412,6 +560,7 @@ class FixExecutor:
         tokens = ["?", "unknown", "n/a", "none", "null", "."]
 
         before_count = self.df[column].astype(str).str.lower().str.strip().isin(tokens).sum()
+
         self.df.loc[self.df[column].astype(str).str.lower().str.strip().isin(tokens), column] = np.nan
 
         self.execution_log.append({
@@ -437,7 +586,6 @@ class FixExecutor:
         before_count = self.df[column].astype(str).str.contains(r'[?!@#$%^&*]', na=False).sum()
 
         self.df[column] = self.df[column].astype(str).str.replace(r'[?!@#$%^&*]', ' ', regex=True)
-        self.df[column] = self.df[column].str.replace(r'\s+', ' ', regex=True).str.strip()
 
         self.execution_log.append({
             "column": column,
@@ -447,18 +595,12 @@ class FixExecutor:
 
     def _apply_empty_text_to_mode(self, fix):
         column = fix.column
-
-        if pd.api.types.is_numeric_dtype(self.df[column]):
-            return
-
         mode_val = fix.metadata.get("mode_value")
 
-        empty_mask = self.df[column].astype(str).str.strip().isin(
-            ['', 'nan', 'NaN', 'None', 'NONE']
-        )
-        before_count = empty_mask.sum()
+        empty_variants = self.df[column].astype(str).str.strip().isin(['', 'nan', 'NaN', 'None', 'NONE'])
+        before_count = empty_variants.sum()
 
-        self.df.loc[empty_mask, column] = mode_val
+        self.df.loc[empty_variants, column] = mode_val
 
         self.execution_log.append({
             "column": column,
@@ -469,10 +611,10 @@ class FixExecutor:
     def _apply_empty_text_to_nan(self, fix):
         column = fix.column
 
-        empty_mask = self.df[column].astype(str).str.strip().isin(['', 'nan', 'NaN', 'None', 'NONE'])
-        before_count = empty_mask.sum()
+        empty_variants = self.df[column].astype(str).str.strip().isin(['', 'nan', 'NaN', 'None', 'NONE'])
+        before_count = empty_variants.sum()
 
-        self.df.loc[empty_mask, column] = np.nan
+        self.df.loc[empty_variants, column] = np.nan
 
         self.execution_log.append({
             "column": column,
@@ -480,6 +622,9 @@ class FixExecutor:
             "values_changed": before_count
         })
 
+    # --------------------------
+    # Date Format Fixes
+    # --------------------------
     def _apply_invalid_date_to_nan(self, fix):
         column = fix.column
 
@@ -505,7 +650,6 @@ class FixExecutor:
         self.df = self.df[~invalid_mask]
         after_rows = len(self.df)
 
-        # Reset ID columns after dropping rows
         if before_rows != after_rows:
             self._reset_id_columns()
 
@@ -533,34 +677,32 @@ class FixExecutor:
 
     def _apply_invalid_date_impute_median(self, fix):
         column = fix.column
-        median_date_str = fix.metadata.get("median_date")
+        median_date = fix.metadata.get("median_date")
 
         parsed_dates = pd.to_datetime(self.df[column], errors='coerce')
         invalid_mask = parsed_dates.isna() & self.df[column].notna()
         before_count = invalid_mask.sum()
 
-        self.df.loc[invalid_mask, column] = median_date_str
+        self.df.loc[invalid_mask, column] = median_date
 
         self.execution_log.append({
             "column": column,
             "fix_applied": fix.fix_label,
-            "values_changed": f"{before_count} dates imputed with median"
+            "values_changed": before_count
         })
 
     # --------------------------
-    # Domain Validation Fixes
+    # Domain Constraint Fixes
     # --------------------------
     def _apply_impossible_age_to_median(self, fix):
         column = fix.column
         median_val = fix.metadata.get("median_value")
 
-        # Handle NaN median
         if pd.isna(median_val):
             median_val = 30
         else:
             median_val = int(round(median_val))
 
-        # Convert to numeric first
         numeric_col = pd.to_numeric(self.df[column], errors='coerce')
         before_count = len(numeric_col[(numeric_col > 120) | (numeric_col < 0)])
 
@@ -579,7 +721,6 @@ class FixExecutor:
     def _apply_impossible_age_to_nan(self, fix):
         column = fix.column
 
-        # Convert to numeric first
         numeric_col = pd.to_numeric(self.df[column], errors='coerce')
         before_count = len(numeric_col[(numeric_col > 120) | (numeric_col < 0)])
 
@@ -595,7 +736,6 @@ class FixExecutor:
     def _apply_drop_impossible_age_rows(self, fix):
         column = fix.column
 
-        # Convert to numeric first
         numeric_col = pd.to_numeric(self.df[column], errors='coerce')
 
         before_rows = len(self.df)
@@ -689,7 +829,7 @@ class FixExecutor:
         ]
 
         unparsed_mask = pd.Series([True] * len(self.df), index=self.df.index)
-        unparsed_mask[self.df[column].isna()] = False  # Don't try to parse actual NaNs
+        unparsed_mask[self.df[column].isna()] = False
 
         for fmt in date_formats:
             if unparsed_mask.sum() == 0:
@@ -739,6 +879,7 @@ class FixExecutor:
             "FIX_MEDIAN_IMPUTE": self._apply_median_impute,
             "FIX_MEAN_IMPUTE": self._apply_mean_impute,
             "FIX_MODE_IMPUTE": self._apply_mode_impute,
+            "FIX_EXTRACT_NUMERIC_IMPUTE": self._apply_extract_numeric_impute,
             "FIX_DROP_COLUMN": self._apply_drop_column,
             "FIX_DROP_ROWS": self._apply_drop_rows,
             "FIX_FORWARD_FILL": self._apply_forward_fill,
@@ -752,7 +893,10 @@ class FixExecutor:
             "FIX_CAP_PERCENTILE": self._apply_cap_percentile,
             "FIX_CAP_IQR": self._apply_cap_iqr,
             "FIX_REMOVE_OUTLIERS": self._apply_remove_outliers,
+            "FIX_WINSORIZE": self._apply_winsorize,
             "FIX_KEEP_FIRST_ID": self._apply_keep_first_id,
+            "FIX_KEEP_LAST_ID": self._apply_keep_last_id,
+            "FIX_KEEP_COMPLETE": self._apply_keep_complete,
             "FIX_DROP_EXACT_DUPLICATES": self._apply_drop_exact_duplicates,
             "FIX_STRIP_WHITESPACE": self._apply_strip_whitespace,
             "FIX_REMOVE_NON_ASCII": self._apply_remove_non_ascii,
@@ -772,7 +916,9 @@ class FixExecutor:
             "FIX_ZERO_MONETARY_TO_MEDIAN": self._apply_zero_monetary_to_median,
             "FIX_ZERO_MONETARY_TO_NAN": self._apply_zero_monetary_to_nan,
             "FIX_DROP_ZERO_MONETARY_ROWS": self._apply_drop_zero_monetary_rows,
-            "FIX_STANDARDIZE_DATE_FORMAT": self._apply_standardize_date_format
+            "FIX_STANDARDIZE_DATE_FORMAT": self._apply_standardize_date_format,
+            "FIX_DROP_TEXT_ROWS": self._apply_drop_text_rows,
+            "FIX_DROP_INVALID_ROWS": self._apply_drop_invalid_rows
         }
 
         method = fix_method_map.get(fix.fix_id)

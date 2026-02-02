@@ -1,5 +1,7 @@
 from .FixExecutor import FixExecutor
 from .FixRecommendationEngine import FixRecommendationEngine
+
+
 class InteractiveFixController:
 
     def __init__(self, df, issues, metadata):
@@ -18,17 +20,27 @@ class InteractiveFixController:
 
         for idx, issue in enumerate(self.issues, start=1):
 
+            column = issue.get('column')
+
+            if column not in self.executor.df.columns:
+                print(f"\nISSUE {idx} / {len(self.issues)}")
+                print("-" * 50)
+                print(f"Type     : {issue['issue_type']}")
+                print(f"Column   : {column}")
+                print(f"⚠ Skipped - Column no longer exists (was dropped earlier)")
+                continue
+
             print(f"\nISSUE {idx} / {len(self.issues)}")
             print("-" * 50)
             print(f"Type     : {issue['issue_type']}")
-            print(f"Column   : {issue['column']}")
+            print(f"Column   : {column}")
             print(f"Severity : {issue['severity']}")
             print(f"Details  : {issue['description']}")
 
             choice = input("Do you want to fix this issue? (y/n): ").strip().lower()
 
             if choice != 'y':
-                print("⏭ Skipped")
+                print("⭕ Skipped")
                 continue
 
             fixes = self.recommender.generate_recommendations_for_issue(issue)
@@ -49,7 +61,6 @@ class InteractiveFixController:
                 print("Invalid selection. Skipping issue.")
                 continue
 
-            # APPLY FIX (stateful)
             self.executor.apply_fix(selected_fix)
 
             print(f"✓ Applied fix: {selected_fix.fix_label}")
