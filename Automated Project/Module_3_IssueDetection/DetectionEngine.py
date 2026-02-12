@@ -17,6 +17,72 @@ class IssueDetectionEngine:
         self.monetary_columns = self._detect_monetary_columns()
         self.age_columns = self._detect_age_columns()
 
+    def check_percentage_violations(self):
+    
+        percentage_keywords = ['discount', 'tax', 'rate', 'markup']
+        for col in self.df.columns:
+            if any(key in col.lower() for key in percentage_keywords):
+                # Convert to numeric to check
+                nums = pd.to_numeric(self.df[col], errors='coerce')
+                # Identify values > 100 or < 0
+                violations = nums[(nums > 100) | (nums < 0)]
+                
+                if not violations.empty:
+                    self.issues.append(
+                        DataIssue("PERCENT_VIOLATION", col, "Business Rule Violation", "High",
+                                f"Found {len(violations)} values outside the logical 0-100% range.",
+                                violations.head(3).tolist()).to_dict())
+    
+    def check_email_validity(self):
+        """Detects invalid email formats and common domain typos"""
+        email_regex = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
+        common_typos = ['gnail.com', 'gmal.com', 'yaho.com', 'hotmial.com', 'outlok.com']
+        
+        for col in self.df.columns:
+            if 'email' in col.lower():
+                emails = self.df[col].dropna().astype(str)
+                # Find regex failures OR known typos
+                invalid_mask = ~emails.str.match(email_regex)
+                typo_mask = emails.str.lower().str.contains('|'.join(common_typos))
+                
+                combined = emails[invalid_mask | typo_mask]
+                if not combined.empty:
+                    self.issues.append(DataIssue(
+                        "EMAIL_FORMAT_ISSUE", col, "Text Cleaning", "Medium",
+                        f"Found {len(combined)} invalid emails or domain typos.",
+                        combined.head(3).tolist()
+                    ).to_dict())
+
+    def check_date_logical_sequence(self):
+        """Checks if ship_date is before order_date"""
+        if 'order_date' in self.df.columns and 'ship_date' in self.df.columns:
+            # Convert to datetime for comparison
+            order = pd.to_datetime(self.df['order_date'], errors='coerce')
+            ship = pd.to_datetime(self.df['ship_date'], errors='coerce')
+            
+            violations = self.df[ship < order]
+            if not violations.empty:
+                self.issues.append(DataIssue(
+                    "DATE_SEQUENCE_VIOLATION", "order_date -> ship_date", "Logical Error", "High",
+                    f"Found {len(violations)} records where shipping happens before ordering.",
+                    violations[['order_date', 'ship_date']].head(3).values.tolist()
+                ).to_dict())
+    
+    def check_phone_format(self):
+        """Detects phone numbers with inconsistent formatting/symbols"""
+        for col in self.df.columns:
+            if 'phone' in col.lower() or 'mobile' in col.lower():
+                # Find values with dashes, dots, or parentheses
+                messy_phones = self.df[col].dropna().astype(str)
+                messy_mask = messy_phones.str.contains(r'[-.\(\)\s\+]', regex=True)
+                
+                if messy_mask.any():
+                    self.issues.append(
+                        DataIssue("PHONE_FORMAT_ISSUE", col, "Text Cleaning", "Low",
+                                f"Found {messy_mask.sum()} phone numbers with inconsistent symbols.",
+                                messy_phones[messy_mask].head(3).tolist()).to_dict())
+    
+        
     # SMART COLUMN TYPE DETECTION
     def _detect_age_columns(self):
         """Detect age columns specifically"""
@@ -416,6 +482,8 @@ class IssueDetectionEngine:
                               outliers.head(3).tolist()).to_dict())
 
     def run_all_checks(self):
+        self.check_email_validity()
+        self.check_date_logical_sequence()
         self.check_missing_data()
         self.check_proxy_missingness()
         self.check_empty_string_variants()

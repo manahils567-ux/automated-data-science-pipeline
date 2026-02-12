@@ -14,16 +14,31 @@ class NumericValidityStrategy:
         self.metadata = metadata
 
     def generate_fixes(self, issue):
-        """
-        Generate fixes for numeric validity violations.
-        """
         fixes = []
         column = issue["column"]
         issue_id = issue["issue_id"]
 
-        # Convert column to numeric for analysis (coerce errors to NaN)
+        # Convert column to numeric for analysis
         numeric_col = pd.to_numeric(self.df[column], errors='coerce')
 
+        percentage_keywords = ['discount', 'tax', 'rate', 'percentage', 'markup']
+
+        if any(key in column.lower() for key in percentage_keywords):
+            # Count values that violate the 0-100 business rule
+            invalid_count = len(numeric_col[(numeric_col > 100) | (numeric_col < 0)])
+            
+            if invalid_count > 0:
+                fixes.append(DataFix(
+                    fix_id="FIX_CLIP_PERCENTAGE",
+                    issue_id=issue_id,
+                    column=column,
+                    fix_label=f"Clip {column} to Range (0-100)",
+                    fix_description="Enforce business rule: Force values < 0 to 0 and > 100 to 100.",
+                    impact=f"Corrects {invalid_count} business rule violations",
+                    risk="Low - preserves data while ensuring logical bounds",
+                    is_recommended=True
+                ))
+        
         # Negative age fix
         if "NEG_AGE" in issue_id or "age" in column.lower():
             invalid_count = len(numeric_col[numeric_col < 0])
@@ -107,6 +122,34 @@ class NumericValidityStrategy:
                     risk="Data loss",
                     is_recommended=False,
                     metadata={"rows_to_drop": invalid_count}
+                ))
+        elif "PERCENT_VIOLATION" in issue_id:
+            invalid_count = len(numeric_col[(numeric_col > 100) | (numeric_col < 0)])
+            
+            # Option 1: Clipping
+            fixes.append(DataFix(
+                fix_id="FIX_CLIP_PERCENTAGE",
+                issue_id=issue_id,
+                column=column,
+                fix_label="Clip Values to Range (0-100)",
+                fix_description="Force negative values to 0 and values over 100 to 100.",
+                impact=f"Corrects {invalid_count} business rule violations",
+                risk="Low - preserves data intent while fixing logical errors",
+                is_recommended=True
+            ))
+
+            # Option 2: Scale Normalization (0.1 -> 10)
+            decimals = numeric_col[(numeric_col > 0) & (numeric_col < 1)]
+            if not decimals.empty:
+                fixes.append(DataFix(
+                    fix_id="FIX_SCALE_PERCENTAGE",
+                    issue_id=issue_id,
+                    column=column,
+                    fix_label="Normalize Decimals (Scale 0.1 to 10%)",
+                    fix_description="Detects decimal values and converts them to percentages.",
+                    impact=f"Scales {len(decimals)} decimal entries to match percentage format",
+                    risk="Medium - assumes 0.1 was intended as 10%",
+                    is_recommended=False
                 ))
 
         return fixes

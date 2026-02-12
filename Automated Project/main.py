@@ -25,7 +25,7 @@ MAGENTA = "\033[35m"
 GRAY = "\033[90m"
 
 files = [
-    "Dirty_data_Testing_1.csv"
+    "Dirty_test_data.csv"
 ]
 
 if __name__ == "__main__":

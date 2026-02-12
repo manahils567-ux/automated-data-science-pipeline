@@ -145,6 +145,17 @@ class MissingValueStrategy:
                     is_recommended=False,
                     metadata={"median_value": median_val, "round_to_int": is_integer_context}
                 ))
+                
+                fixes.append(DataFix(
+                    fix_id="FIX_STOCHASTIC_FILL",
+                    issue_id=issue_id,
+                    column=column,
+                    fix_label="Stochastic Imputation (Preserve Variance)",
+                    fix_description="Fills gaps by randomly sampling from existing values in this column.",
+                    impact="Maintains the statistical distribution and standard deviation of the dataset.",
+                    risk="Medium - introduces randomness, which might not be ideal for exact accounting.",
+                    is_recommended=True  # Usually recommended for Data Science/ML prep
+                ))
 
         elif "category" in dtype or "object" in dtype:
             clean_values = self.df[column].dropna()
