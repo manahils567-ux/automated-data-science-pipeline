@@ -1,0 +1,4 @@
+column,fix_applied,values_changed
+email,Mark Invalid Emails as Missing,0
+age,Replace with Median (29),2
+salary,Replace with Median (52000.0),2

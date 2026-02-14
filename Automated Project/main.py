@@ -1,3 +1,4 @@
+import pandas as pd
 from Module_1_DataIngestion.AutoIngestion import AutoIngestion
 from Module_2_DataProfiling.schema_validator import SchemaValidator
 from Module_2_DataProfiling.DataTypeInferencer import DataTypeInferencer
@@ -177,6 +178,14 @@ if __name__ == "__main__":
                 cleaned_df.to_csv(output_path, index=False)
 
                 print(f"{GREEN}✓ Cleaned dataset saved: {output_path}{RESET}")
+
+                # ================= STEP 4.2 : EXPORT EXECUTION LOG =================
+                if execution_log:
+                    save_log = input(f"\n{YELLOW}Do you want to save the detailed execution log? (y/n): {RESET}").strip().lower()
+                    if save_log == 'y':
+                        log_path = file_path.replace(".csv", f"_log_{timestamp}.csv")
+                        pd.DataFrame(execution_log).to_csv(log_path, index=False)
+                        print(f"{GREEN}✓ Execution log saved: {log_path}{RESET}")
 
                 # Update df reference
                 df = cleaned_df
