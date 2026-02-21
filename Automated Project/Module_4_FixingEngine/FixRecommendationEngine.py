@@ -21,6 +21,8 @@ class FixRecommendationEngine:
 
         # Initialize all strategy handlers
         self.strategies = {
+            "Logical Error": DateFormatStrategy(df, metadata),
+            "Text Cleaning": TextCleaningStrategy(df, metadata),
             "Missing Data": MissingValueStrategy(df, metadata),
             "Proxy Missingness": TextCleaningStrategy(df, metadata),
             "Numeric Validity": NumericValidityStrategy(df, metadata),

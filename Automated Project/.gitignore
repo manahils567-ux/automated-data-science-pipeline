@@ -1,0 +1,7 @@
+# Python cache files (reduces file count significantly)
+__pycache__/
+*.py[cod]
+
+# Generated output files (logs and cleaned data)
+*_cleaned_*.csv
+*_log_*.csv

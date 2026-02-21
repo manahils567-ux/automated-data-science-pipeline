@@ -157,5 +157,41 @@ class TextCleaningStrategy:
                 is_recommended=not valid_values.empty,
                 metadata={"affected_count": affected_count}
             ))
+            
+        # Inside generate_fixes method
+        elif "EMAIL_FORMAT_ISSUE" in issue_id:
+            fixes.append(DataFix(
+                fix_id="FIX_EMAIL_TYPOS",
+                issue_id=issue_id,
+                column=column,
+                fix_label="Fix Common Email Domain Typos",
+                fix_description="Automatically corrects gnail.com -> gmail.com, yaho.com -> yahoo.com, etc.",
+                impact="Repairs contact information without losing data",
+                risk="Low - only targets known common typos",
+                is_recommended=True
+            ))
+            
+            fixes.append(DataFix(
+                fix_id="FIX_EMPTY_TEXT_TO_NAN",
+                issue_id=issue_id,
+                column=column,
+                fix_label="Mark Invalid Emails as Missing",
+                fix_description="Convert invalid email strings to NaN",
+                impact="Prevents sending bounce-back emails",
+                risk="Low",
+                is_recommended=False
+            ))
+            
+        elif "PHONE_FORMAT_ISSUE" in issue_id:
+            fixes.append(DataFix(
+                fix_id="FIX_STANDARDIZE_PHONE",
+                issue_id=issue_id,
+                column=column,
+                fix_label="Standardize Phone Format (Digits Only)",
+                fix_description="Removes all non-numeric characters (brackets, dashes, dots, spaces).",
+                impact="Creates uniform numeric strings for database consistency",
+                risk="Low - preserves the sequence of numbers",
+                is_recommended=True
+            ))
 
         return fixes

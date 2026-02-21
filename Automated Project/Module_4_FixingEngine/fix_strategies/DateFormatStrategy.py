@@ -113,5 +113,17 @@ class DateFormatStrategy:
                     is_recommended=False,
                     metadata={"default_date": "1900-01-01", "invalid_count": truly_invalid_count}
                 ))
+                
+        elif "DATE_SEQUENCE_VIOLATION" in issue_id:
+            fixes.append(DataFix(
+                fix_id="FIX_SWAP_LOGICAL_DATES",
+                issue_id=issue_id,
+                column=column, 
+                fix_label="Swap Inverted Dates",
+                fix_description="Assumes dates were entered in the wrong columns and swaps them.",
+                impact="Restores logical timeline for the record",
+                risk="Medium - assumes the error was a column swap",
+                is_recommended=True
+            ))
 
         return fixes

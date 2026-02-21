@@ -872,10 +872,115 @@ class FixExecutor:
         data_loss_pct = ((original_rows - current_rows) / original_rows) * 100
 
         return data_loss_pct > 50
+    
+    def _apply_clip_percentage(self, fix):
+        """Logic to clip percentage values (like Discount) to 0-100 range"""
+        column = fix.column
+        
+        # 1. Ensure the column is numeric (convert strings/objects to numbers)
+        self.df[column] = pd.to_numeric(self.df[column], errors='coerce')
+        
+        # 2. Apply clipping: values < 0 become 0, values > 100 become 100
+        self.df[column] = self.df[column].clip(lower=0, upper=100)
+        
+        # 3. Log the action
+        self.execution_log.append({
+            "column": column,
+            "fix_applied": "Clipped to 0-100 range",
+            "details": f"Applied business rule: constrained {column} to logical percentage bounds."
+        })
+        
+    def _apply_email_typo_fix(self, fix):
+        """Corrects common email domain misspellings"""
+        column = fix.column
+        
+        # Dictionary of typo: correction
+        corrections = {
+            'gnail.com': 'gmail.com',
+            'gmal.com': 'gmail.com',
+            'yaho.com': 'yahoo.com',
+            'hotmial.com': 'hotmail.com',
+            'outlok.com': 'outlook.com',
+            'gmial.com': 'gmail.com'
+        }
+        
+        # Apply replacements
+        for typo, correct in corrections.items():
+            self.df[column] = self.df[column].astype(str).str.replace(typo, correct, case=False, regex=False)
+        
+        # Clean up any 'nan' strings created by casting
+        self.df[column] = self.df[column].replace('nan', np.nan)
+        
+        self.execution_log.append({
+            "column": column,
+            "fix_applied": "Corrected Email Typos",
+            "details": f"Standardized domains for {column} using fuzzy mapping."
+        })
+    
+    def _apply_standardize_phone(self, fix):
+        column = fix.column
+        # Remove everything that isn't a digit
+        self.df[column] = self.df[column].astype(str).str.replace(r'\D', '', regex=True)
+        # Handle 'nan' strings
+        self.df[column] = self.df[column].replace('nan', np.nan)
+        
+        self.execution_log.append({
+            "column": column,
+            "fix_applied": "Standardized Phone Numbers",
+            "details": "Removed special characters and spaces from phone digits."
+        })
+    
+    def _apply_swap_dates(self, fix):
+        # column name here might look like "order_date -> ship_date"
+        cols = fix.column.split(" -> ")
+        start_col, end_col = cols[0], cols[1]
+        
+        # Identify where they are swapped
+        mask = pd.to_datetime(self.df[end_col]) < pd.to_datetime(self.df[start_col])
+        
+        # Swap them using a temporary variable
+        temp = self.df.loc[mask, start_col].copy()
+        self.df.loc[mask, start_col] = self.df.loc[mask, end_col]
+        self.df.loc[mask, end_col] = temp
+        
+        self.execution_log.append({
+            "column": fix.column,
+            "fix_applied": "Swapped inverted dates",
+            "details": f"Fixed timeline logic between {start_col} and {end_col}"
+        })
+    
+    def _apply_stochastic_fill(self, fix):
+        """Fills missing values by sampling from the column's existing distribution"""
+        column = fix.column
+        
+        # Get all non-null values to use as a sample pool
+        valid_values = self.df[column].dropna().values
+        
+        if len(valid_values) == 0:
+            # Fallback if the whole column is empty
+            self.execution_log.append({"column": column, "fix_applied": "Skipped Stochastic Fill", "details": "No valid data to sample from."})
+            return
+
+        # Identify indices where data is missing
+        missing_mask = self.df[column].isna()
+        
+        # For every missing slot, pick a random value from the valid_values
+        self.df.loc[missing_mask, column] = np.random.choice(valid_values, size=missing_mask.sum())
+        
+        self.execution_log.append({
+            "column": column,
+            "fix_applied": "Stochastic Imputation",
+            "details": f"Filled {missing_mask.sum()} gaps using random samples from existing data to preserve variance."
+        })
 
     def apply_fix(self, fix):
 
         fix_method_map = {
+            "FIX_STOCHASTIC_FILL": self._apply_stochastic_fill,
+            "FIX_SWAP_LOGICAL_DATES": self._apply_swap_dates,
+            "FIX_STANDARDIZE_PHONE": self._apply_standardize_phone,
+            "FIX_EMAIL_TYPOS": self._apply_email_typo_fix,
+            "FIX_CLIP_PERCENTAGE": self._apply_clip_percentage,
             "FIX_MEDIAN_IMPUTE": self._apply_median_impute,
             "FIX_MEAN_IMPUTE": self._apply_mean_impute,
             "FIX_MODE_IMPUTE": self._apply_mode_impute,
