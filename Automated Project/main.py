@@ -24,7 +24,7 @@ CYAN = "\033[36m"
 MAGENTA = "\033[35m"
 GRAY = "\033[90m"
 
-files = ["Dirty_test_data.csv"]
+files = ["dirty_test_data.csv"]
 
 if __name__ == "__main__":
 
@@ -105,11 +105,11 @@ if __name__ == "__main__":
                 outlier_detector.summary(df)
                 outlier_detector.visualize(df)
                 clean_df = outlier_detector.get_clean_data(df)
+                clean_df = clean_df.drop(columns=['Outlier'], errors='ignore')
                 print(f"{GREEN}STATUS : Cleaned dataset without outliers has {clean_df.shape[0]} rows{RESET}")
             except Exception as e:
                 print(f"{YELLOW}⚠ Outlier detection skipped due to error: {e}{RESET}")
                 clean_df = df.copy()
-                clean_df['Outlier'] = 1  # treat all as inliers
 
             # ================= STEP 4.0 : Issue Detection Engine =================
             print(f"\n{YELLOW}STEP 4.0 : ISSUE DETECTION ENGINE{RESET}")
@@ -156,7 +156,7 @@ if __name__ == "__main__":
                 # Save cleaned dataset
                 timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
                 output_path = file_path.replace(".csv", f"_cleaned_{timestamp}.csv")
-                cleaned_df.to_csv(output_path, index=False)
+                cleaned_df.drop(columns=['Outlier'], errors='ignore').to_csv(output_path, index=False)
                 print(f"{GREEN}✓ Cleaned dataset saved: {output_path}{RESET}")
 
                 # Export execution log
@@ -169,7 +169,7 @@ if __name__ == "__main__":
 
             # ================= FINAL PREVIEW =================
             print(f"\n{BOLD}{CYAN}FINAL DATA PREVIEW{RESET}")
-            print(cleaned_df.head())
+            print(cleaned_df.drop(columns=['Outlier'], errors='ignore').head())
             print(f"\n{GRAY}{'=' * 60}{RESET}\n")
 
         except FileNotFoundError:

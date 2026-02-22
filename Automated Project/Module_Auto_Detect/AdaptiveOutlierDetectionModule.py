@@ -3,6 +3,8 @@ import pandas as pd
 import numpy as np
 from sklearn.ensemble import IsolationForest
 from sklearn.neighbors import LocalOutlierFactor
+import matplotlib
+matplotlib.use('TkAgg')
 import matplotlib.pyplot as plt
 import seaborn as sns
 
@@ -119,7 +121,9 @@ class AdaptiveOutlierModule:
 
     def visualize(self, df, cols=None):
         """
-        Visualize outliers safely
+        Visualize outliers safely.
+        Uses block=True and closes the figure afterwards so that
+        closing the window does not flush stdin and skip user prompts.
         """
         if 'Outlier' not in df.columns:
             df['Outlier'] = self.detect(df)
@@ -130,15 +134,17 @@ class AdaptiveOutlierModule:
             print("⚠ Warning: Not enough numeric columns to visualize outliers.")
             return
 
-        plt.figure(figsize=(8, 6))
+        fig, ax = plt.subplots(figsize=(8, 6))
         sns.scatterplot(
             data=df,
             x=available_cols[0],
             y=available_cols[1],
             hue='Outlier',
             palette={1: 'green', -1: 'red'},
-            alpha=0.6
+            alpha=0.6,
+            ax=ax
         )
-        plt.title("Adaptive Outlier Detection Scatter Plot")
-        plt.show()
-
+        ax.set_title("Adaptive Outlier Detection Scatter Plot")
+        plt.tight_layout()
+        plt.show(block=True)
+        plt.close(fig)

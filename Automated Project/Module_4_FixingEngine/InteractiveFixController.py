@@ -1,5 +1,44 @@
+import sys
+import time
 from .FixExecutor import FixExecutor
 from .FixRecommendationEngine import FixRecommendationEngine
+
+
+def _flush_stdin():
+    """
+    Discard any pending characters that were buffered into stdin by background
+    events (e.g. closing a matplotlib window, pandas stderr output) before we
+    call input().  A short sleep lets any in-flight writes settle first; then
+    we drain whatever is already sitting in the buffer without blocking.
+    Only the Windows path uses msvcrt; on other platforms the except branch
+    is a no-op so the function is always safe to call.
+    """
+    time.sleep(0.15)
+    try:
+        import msvcrt
+        while msvcrt.kbhit():
+            msvcrt.getwch()
+    except Exception:
+        pass
+
+
+def _prompt(message):
+    """
+    Flush stdout so the prompt is visible, drain stale stdin bytes, then
+    call input().  Returns the stripped, lowercased response string.
+    """
+    sys.stdout.flush()
+    _flush_stdin()
+    return input(message).strip().lower()
+
+
+def _prompt_raw(message):
+    """
+    Same as _prompt but returns the original strip (no lower) for fix number input.
+    """
+    sys.stdout.flush()
+    _flush_stdin()
+    return input(message).strip()
 
 
 class InteractiveFixController:
@@ -37,7 +76,7 @@ class InteractiveFixController:
             print(f"Severity : {issue['severity']}")
             print(f"Details  : {issue['description']}")
 
-            choice = input("Do you want to fix this issue? (y/n): ").strip().lower()
+            choice = _prompt("Do you want to fix this issue? (y/n): ")
 
             if choice != 'y':
                 print("⭕ Skipped")
@@ -55,7 +94,7 @@ class InteractiveFixController:
                 print(f"[{i}] {fix.fix_label}{tag}")
 
             try:
-                selected = int(input("Select fix number: ")) - 1
+                selected = int(_prompt_raw("Select fix number: ")) - 1
                 selected_fix = fixes[selected]
             except:
                 print("Invalid selection. Skipping issue.")
